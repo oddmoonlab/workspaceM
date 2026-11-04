@@ -547,7 +547,7 @@ const state = {
             <div class="preview-title">OGQ Market Preview <span id="ogq-preview-count" style="color:#d9534f;font-size:13px;font-weight:600;">0</span> • Line <span id="ogq-line-val-summary" style="color:#d9534f;font-weight:700;">4PX</span></div>
             <span class="dark-tag">DARK</span>
           </div>
-          <div id="_ogq-ios-tip" style="display:none;background:#1a1a2e;color:#a0c4ff;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:8px;text-align:center;">이미지를 꾸욱 눌러 → 사진에 추가</div>
+          <div id="_ogq-ios-tip" style="display:none;background:#1a1a2e;color:#a0c4ff;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:8px;text-align:center;">Save · ZIP 버튼 → 파일 앱 › 다운로드에 저장 · 사진 앱은 이미지를 꾸욱 눌러 → 사진에 추가</div>
           <div class="grid-board" id="ogq-grid-board"></div>
         </div>
       </div>
@@ -811,28 +811,27 @@ const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
   };
 })();
 
-/* 단일 파일 저장 */
+/* data URL → Blob */
+function _dataURLtoBlob(url){
+  const [head, body] = url.split(',');
+  const mime = (head.match(/:(.*?);/)||[])[1] || 'image/png';
+  const bin = atob(body), arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr], {type:mime});
+}
+
+/* 단일 파일 저장 — 아이패드 Safari도 실제 파일로 저장 (파일 앱 › 다운로드) */
 function saveFile(filename, dataUrlOrBlob){
-  if(_isIOS){
-    const src = (dataUrlOrBlob instanceof Blob)
-      ? URL.createObjectURL(dataUrlOrBlob)
-      : dataUrlOrBlob;
-    window._showIOSGallery([{src, label: filename}]);
-    return;
-  }
-  /* 데스크탑 */
-  const href = (dataUrlOrBlob instanceof Blob)
-    ? URL.createObjectURL(dataUrlOrBlob)
-    : dataUrlOrBlob;
+  const blob = (dataUrlOrBlob instanceof Blob) ? dataUrlOrBlob : _dataURLtoBlob(dataUrlOrBlob);
+  const href = URL.createObjectURL(blob);
   const link=document.createElement('a');
   link.download=filename; link.href=href;
   link.style.display='none';
   document.body.appendChild(link);
   link.click();
-  setTimeout(()=>{
-    document.body.removeChild(link);
-    if(href.startsWith('blob:')) URL.revokeObjectURL(href);
-  }, 300);
+  /* 아이패드는 '다운로드할까요?' 확인을 누를 때까지 주소가 살아 있어야 해서 오래 남겨 둠 */
+  setTimeout(()=>{ link.remove(); }, 1000);
+  setTimeout(()=>{ URL.revokeObjectURL(href); }, 180000);
 }
 
 /* 화면 전환 */
@@ -1159,6 +1158,9 @@ function refreshApp(){
         previewModal.style.display='flex';
       });
       slot.appendChild(imgEl);
+      const btnSaveI=document.createElement('button'); btnSaveI.className='btn-individual-save'; btnSaveI.innerText='Save';
+      btnSaveI.onclick=(e)=>{ e.stopPropagation(); saveFile(item.name.replace('.png','_ogq.png'), dataUrl); };
+      slot.appendChild(btnSaveI);
     } else {
       slot.appendChild(canvas);
       canvas.addEventListener('click', ()=>{
@@ -1181,15 +1183,16 @@ previewModal.addEventListener('click', ()=>{ previewModal.style.display='none'; 
 modalWrap.addEventListener('click', e=>{ e.stopPropagation(); });
 btnZip.addEventListener('click', ()=>{
   if(imageFiles.length===0){ alert('No images uploaded yet.'); return; }
-  const canvases=gridBoard.querySelectorAll('.grid-slot.filled canvas');
+  const slots=gridBoard.querySelectorAll('.grid-slot.filled');
 
-  if(_isIOS) return;
-
-  /* 데스크탑: ZIP */
+  /* ZIP (컴퓨터·아이패드 공통) */
   const zip=new JSZip();
   imageFiles.forEach((item,index)=>{
-    const canvas=canvases[index];
-    const base64Data=canvas.toDataURL('image/png').split(',')[1];
+    const slot=slots[index]; if(!slot) return;
+    const cv=slot.querySelector('canvas'), im=slot.querySelector('img');
+    const url = cv ? cv.toDataURL('image/png') : (im ? im.src : '');
+    if(!url) return;
+    const base64Data=url.split(',')[1];
     zip.file(item.name.replace('.png','_ogq.png'), base64Data, {base64:true});
   });
   zip.generateAsync({type:'blob'}).then(content=>{
@@ -1533,33 +1536,12 @@ btnZip.addEventListener('click', ()=>{
         if(parseInt(item.style.line)>0){ vCtx.strokeStyle='#FFFFFF'; vCtx.lineWidth=parseInt(item.style.line); vCtx.lineJoin='round'; vCtx.strokeText(textStr,itemX,itemY); }
         vCtx.fillStyle='#111111'; vCtx.fillText(textStr,itemX,itemY);
       }
-      if(_isIOS){
-        const blob=_dataURLtoBlob(virtualCanvas.toDataURL('image/png'));
-        rendered[langKey].push(new File([blob], `${item.name}.png`, {type:'image/png'}));
-      } else {
-        rendered[langKey]._b64=(rendered[langKey]._b64||[]);
-        rendered[langKey]._b64.push({name:`${item.name}.png`, data:virtualCanvas.toDataURL('image/png').split(',')[1]});
-      }
+      rendered[langKey]._b64=(rendered[langKey]._b64||[]);
+      rendered[langKey]._b64.push({name:`${item.name}.png`, data:virtualCanvas.toDataURL('image/png').split(',')[1]});
     });
   });
 
-  if(_isIOS){
-    /* iOS: 전체 언어 이미지를 갤러리 모달로 표시 */
-    const items=[];
-    stickerItems.forEach(item=>{
-      Object.keys(langData).forEach(langKey=>{
-        const fileObj=rendered[langKey].find(f=>f.name===`${item.name}.png`);
-        if(fileObj){
-          const url=URL.createObjectURL(fileObj);
-          items.push({src:url, label:`${item.name} · ${langKey.toUpperCase()}`});
-        }
-      });
-    });
-    window._showIOSGallery(items);
-    return;
-  }
-
-  /* 데스크탑: ZIP */
+  /* ZIP (컴퓨터·아이패드 공통) */
   const zip=new JSZip();
   const folders={ ko:zip.folder("KO"), en:zip.folder("EN"), ja:zip.folder("JA"), zh:zip.folder("TW"), th:zip.folder("TH") };
   Object.keys(langData).forEach(langKey=>{
@@ -1719,19 +1701,7 @@ btnStockZip.addEventListener('click', ()=>{
   if(stockItems.length===0){ alert('크롭 처리할 대상 스톡 파일이 존재하지 않습니다.'); return; }
   const exportCanvas=document.createElement('canvas'); const eCtx=exportCanvas.getContext('2d');
 
-  if(_isIOS){
-    /* iOS: 전체 이미지를 갤러리 모달로 표시 */
-    const items=[];
-    stockItems.forEach(item=>{
-      exportCanvas.width=item.bounds.w; exportCanvas.height=item.bounds.h; eCtx.clearRect(0,0,item.bounds.w,item.bounds.h);
-      eCtx.drawImage(item.imgElement, item.bounds.x, item.bounds.y, item.bounds.w, item.bounds.h, 0, 0, item.bounds.w, item.bounds.h);
-      items.push({src:exportCanvas.toDataURL('image/png'), label:`${item.name}_cropped.png`});
-    });
-    window._showIOSGallery(items);
-    return;
-  }
-
-  /* 데스크탑: ZIP */
+  /* ZIP (컴퓨터·아이패드 공통) */
   const zip=new JSZip();
   stockItems.forEach(item=>{
     exportCanvas.width=item.bounds.w; exportCanvas.height=item.bounds.h; eCtx.clearRect(0,0,item.bounds.w,item.bounds.h);
@@ -1840,13 +1810,7 @@ btnStockZip.addEventListener('click', ()=>{
   });
 })();
 
-/* iOS: ZIP 다운로드 버튼 숨기기 */
-if(_isIOS){
-  ['ogq-btn-zip','ln-btn-zip','btn-stock-zip'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.style.display='none';
-  });
-}
+
 </script>
 </body>
 </html>
