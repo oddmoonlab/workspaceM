@@ -374,6 +374,50 @@ input,textarea,[contenteditable]{-webkit-user-select:text;-moz-user-select:text;
 </style>
 </head>
 <body>
+<!-- © 2026 ODDMOON LAB · 유여진 강사. All rights reserved. 무단 복제·수정·재배포 금지. -->
+<style>
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}
+#copyGuard{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#eef0f5;color:#1b1e2b;font-family:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;text-align:center;line-height:1.6;padding:24px}
+#copyGuard b{display:block;font-size:20px;margin-bottom:8px}
+</style>
+<script>
+(() => {
+  /* ① 이 페이지가 열려도 되는 주소 ([] 로 비우면 주소 검사 안 함) */
+  const ALLOWED_HOSTS = ['oddmoonlab.github.io'];
+
+  /* ② 우클릭·꾹 누르기·복사를 허용할 영역 (CSS 선택자, 쉼표로 여러 개) */
+  const ALLOW_SELECTOR = 'input, textarea, [draggable="true"]';  /* 스티커 칸 끌어서 순서 바꾸기 허용 */
+
+  const host = location.hostname;
+  if (ALLOWED_HOSTS.length && !ALLOWED_HOSTS.some(h => host === h || host.endsWith('.' + h))) {
+    const block = () => {
+      const d = document.createElement('div'); d.id = 'copyGuard';
+      d.innerHTML = '<div><b>허가되지 않은 주소예요</b>이 도구는 ODDMOON LAB 공식 페이지에서만 사용할 수 있어요.<br>© 2026 ODDMOON LAB · 유여진 강사. All rights reserved.</div>';
+      document.body.innerHTML = ''; document.body.appendChild(d);
+    };
+    document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', block) : block();
+    throw new Error('blocked');
+  }
+
+  const allowed = t => t && t.closest && t.closest(ALLOW_SELECTOR);
+  ['contextmenu', 'copy', 'cut', 'dragstart'].forEach(type =>
+    document.addEventListener(type, e => { if (!allowed(e.target)) e.preventDefault(); })
+  );
+
+  document.addEventListener('keydown', e => {
+    const k = (e.key || '').toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'F12' ||
+        (mod && ['u', 's', 'p'].includes(k)) ||
+        (mod && (e.shiftKey || e.altKey) && ['i', 'j', 'c'].includes(k))) {
+      e.preventDefault(); e.stopPropagation();
+    }
+  }, true);
+
+  try { console.log('%c© 2026 ODDMOON LAB · 유여진 강사\n이 페이지의 코드와 디자인을 무단으로 복제·수정·재배포하는 것을 금지합니다.', 'font-size:14px;font-weight:bold;color:#2f5bd3'); } catch (_) {}
+})();
+</script>
+
 
 <!-- =====================================================
      🔧 관리자 설정: 비밀번호만 여기서 수정하세요
@@ -845,15 +889,7 @@ function showView(name){
   history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
 }
 
-/* 🔒 우클릭 / 개발자도구 / 소스보기 방지 (참고용 — 완전한 차단은 불가능합니다) */
-document.addEventListener('contextmenu', e=>e.preventDefault());
-document.addEventListener('keydown', e=>{
-  const k=e.key.toLowerCase();
-  const mod=e.ctrlKey||e.metaKey;
-  if(e.key==='F12' || (mod&&(e.shiftKey||e.altKey)&&(k==='i'||k==='j'||k==='c')) || (mod&&(k==='u'||k==='s'))){
-    e.preventDefault();
-  }
-});
+/* 🔒 복제 방지는 <body> 바로 아래 'ODDMOON LAB 복제 방지' 코드에서 처리해요. */
 
 /* 🔗 주소 끝에 #ogq / #viewer / #line / #stock / #anim 이 붙어있으면 해당 화면으로 바로 진입
    예: index.html#ogq → OGQ 작업 화면으로 바로 시작 (허브 화면 생략) */
